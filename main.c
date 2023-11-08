@@ -1,5 +1,5 @@
-#include <omp.h>
 #include <stdio.h>
+#include <pthread.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -18,13 +18,23 @@ void fillMatrix(int arr[], int height, int width);
 void printIntro();
 void printOutro();
 void clearConsole();
+void *rutina_empleados();
+void *rutina_dron();
 
 int main(int argc, char *argv[]) {
+	pthread_t emp_id;
+	pthread_t dron_id;
+	pthread_attr_t attr;
+
+	pthread_attr_init(&attr);
+    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+
   if (argc < 2) {
     printIntro();
   }
   int velocidades_empleados[256];
-  int velocidad_dron = 0;
+  long velocidad_dron = 0;
 
   // ---largo----
   //            |
@@ -69,8 +79,7 @@ int main(int argc, char *argv[]) {
   fillMatrix(parcela_dron, largo_parcela, ancho_parcela);
   fillMatrix(parcela_empleados, largo_parcela, ancho_parcela);
 
-  int velocidad_conjunta_empleados = 0;
-#pragma omp parallel for reduction(+ : velocidad_conjunta_empleados)
+  long velocidad_conjunta_empleados = 0;
   for (int empleadoI = 0; empleadoI < cuenta_empleados; empleadoI++) {
     velocidad_conjunta_empleados += velocidades_empleados[empleadoI];
   }
@@ -78,109 +87,103 @@ int main(int argc, char *argv[]) {
   printf("Los empleados en conjunto fumigan %d secciones por tick\n",
          velocidad_conjunta_empleados);
 
-#pragma omp parallel sections shared(empleados_terminaron, dron_termino,       \
-                                     parcela_dron, parcela_empleados)
-  {
-#pragma omp section
-    {
-      // Mostrar matrices...
-      int frame_count = 0;
-      while (!empleados_terminaron || !dron_termino) {
-        clearConsole();
-        printf("\033[92mParcela Empleados:\n");
-        printMatrix(parcela_empleados, ancho_parcela, largo_parcela);
+  pthread_create(&emp_id, &attr, rutina_empleados, (void *) velocidad_conjunta_empleados);
+  pthread_create(&dron_id, &attr, rutina_dron, (void *) velocidad_dron);
 
-        printf("\033[92mParcela Dron:\n");
-        printMatrix(parcela_dron, ancho_parcela, largo_parcela);
-        printf("Frame %d...\n", ++frame_count);
-        usleep(1000000 / 60); // 60 frames per second.
-      }
-      // Mostrando estado final...
-      clearConsole();
-      printf("\033[92mParcela Empleados:\n");
-      printMatrix(parcela_empleados, ancho_parcela, largo_parcela);
+  // Mostrar matrices...
+  int frame_count = 0;
+  while (!empleados_terminaron || !dron_termino) {
+    clearConsole();
+    printf("\033[92mParcela Empleados:\n");
+    printMatrix(parcela_empleados, ancho_parcela, largo_parcela);
 
-      printf("\033[92mParcela Dron:\n");
-      printMatrix(parcela_dron, ancho_parcela, largo_parcela);
-      printf("Frame %d...\n", ++frame_count);
+    printf("\033[92mParcela Dron:\n");
+    printMatrix(parcela_dron, ancho_parcela, largo_parcela);
+    printf("Frame %d...\n", ++frame_count);
+    usleep(1000000 / 60); // 60 frames per second.
+  }
+  // Mostrando estado final...
+  clearConsole();
+  printf("\033[92mParcela Empleados:\n");
+  printMatrix(parcela_empleados, ancho_parcela, largo_parcela);
 
-      printf("Se termino de fumigar, calculando datos...\n");
-      printf("Los empleados se tardaron %d ticks \n", empleados_tick_count);
-      printf("El dron se tardo %d ticks \n", dron_tick_count);
-      if (empleados_tick_count > dron_tick_count) {
-        int vpromempleados = velocidad_conjunta_empleados / cuenta_empleados;
+  printf("\033[92mParcela Dron:\n");
+  printMatrix(parcela_dron, ancho_parcela, largo_parcela);
+  printf("Frame %d...\n", ++frame_count);
 
-        int empleados_necesarios =
-            (empleados_tick_count - dron_tick_count) / vpromempleados;
-        if (empleados_necesarios == 0) {
-          printf("Se necesita por lo menos 1 empleado más para alcanzar el "
-                 "tiempo de fumigación del dron\n");
-        } else {
-          printf("Los empleados se tardaron más que el dron, se necesitan : %d "
-                 "empleados en promedio para igualar el tiempo del dron \n",
-                 empleados_necesarios);
-        }
+  printf("Se termino de fumigar, calculando datos...\n");
+  printf("Los empleados se tardaron %d ticks \n", empleados_tick_count);
+  printf("El dron se tardo %d ticks \n", dron_tick_count);
+  if (empleados_tick_count > dron_tick_count) {
+    int vpromempleados = velocidad_conjunta_empleados / cuenta_empleados;
 
-      } else {
-        int drones_necesarios =
-            (dron_tick_count - empleados_tick_count) / velocidad_dron;
-        if (drones_necesarios == 0) {
-          printf("Se necesita por lo menos 1 dron mas para alcanzar el tiempo "
-                 "de fumigacion de los empleados\n");
-        } else {
-          printf("Los empleados se tardaron más que el dron, se necesitan : %d "
-                 "empleados en promedio para igualar el tiempo del dron \n",
-                 drones_necesarios);
-        }
-      }
-
-      printOutro();
+    int empleados_necesarios =
+        (empleados_tick_count - dron_tick_count) / vpromempleados;
+    if (empleados_necesarios == 0) {
+      printf("Se necesita por lo menos 1 empleado más para alcanzar el "
+             "tiempo de fumigación del dron\n");
+    } else {
+      printf("Los empleados se tardaron más que el dron, se necesitan : %d "
+             "empleados en promedio para igualar el tiempo del dron \n",
+             empleados_necesarios);
     }
 
-#pragma omp section
-    {
-      int seccion_sin_fumigar = -1;
-      // Drone fumiga parcela...
-      while (!dron_termino) {
-        dron_tick_count += 1;
-
-        for (int i = 0; i <= velocidad_dron; i++) {
-          seccion_sin_fumigar += 1;
-          parcela_dron[seccion_sin_fumigar] = 1;
-          dron_termino = seccion_sin_fumigar == (total_a_fumigar - 1);
-
-          if (dron_termino) {
-            break;
-          }
-        }
-
-        usleep(wait_microseconds);
-      }
-    }
-
-#pragma omp section
-    {
-      int seccion_sin_fumigar = -1;
-
-      while (!empleados_terminaron) {
-        empleados_tick_count += 1;
-
-        for (int i = 0; i <= velocidad_conjunta_empleados; i++) {
-          seccion_sin_fumigar += 1;
-          parcela_empleados[seccion_sin_fumigar] = 1;
-          empleados_terminaron = seccion_sin_fumigar == (total_a_fumigar - 1);
-
-          if (empleados_terminaron) {
-            break;
-          }
-        }
-
-        usleep(wait_microseconds);
-      }
+  } else {
+    int drones_necesarios =
+        (dron_tick_count - empleados_tick_count) / velocidad_dron;
+    if (drones_necesarios == 0) {
+      printf("Se necesita por lo menos 1 dron mas para alcanzar el tiempo "
+             "de fumigacion de los empleados\n");
+    } else {
+      printf("Los empleados se tardaron más que el dron, se necesitan : %d "
+             "empleados en promedio para igualar el tiempo del dron \n",
+             drones_necesarios);
     }
   }
 
+  printOutro();
+
   return 0;
+}
+
+void *rutina_dron() {
+  int seccion_sin_fumigar = -1;
+  // Drone fumiga parcela...
+  while (!dron_termino) {
+    dron_tick_count += 1;
+
+    for (int i = 0; i <= velocidad_dron; i++) {
+      seccion_sin_fumigar += 1;
+      parcela_dron[seccion_sin_fumigar] = 1;
+      dron_termino = seccion_sin_fumigar == (total_a_fumigar - 1);
+
+      if (dron_termino) {
+        break;
+      }
+    }
+
+    usleep(wait_microseconds);
+  }
+}
+
+void *rutina_empleados() {
+  int seccion_sin_fumigar = -1;
+
+  while (!empleados_terminaron) {
+    empleados_tick_count += 1;
+
+    for (int i = 0; i <= velocidad_conjunta_empleados; i++) {
+      seccion_sin_fumigar += 1;
+      parcela_empleados[seccion_sin_fumigar] = 1;
+      empleados_terminaron = seccion_sin_fumigar == (total_a_fumigar - 1);
+
+      if (empleados_terminaron) {
+        break;
+      }
+    }
+
+    usleep(wait_microseconds);
+  }
 }
 
 void printMatrix(int arr[], int height, int width) {
