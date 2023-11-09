@@ -1,5 +1,5 @@
-#include <stdio.h>
 #include <pthread.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
@@ -18,65 +18,82 @@ void fillMatrix(int arr[], int height, int width);
 void printIntro();
 void printOutro();
 void clearConsole();
+
 int dron_tick_count = 0;
 int velocidad_dron = 0;
 int dron_termino = 0;
-int *dronParams;
-int *empleadosParams;
-
-int *parcela_dron;
-int *parcela_empleados;
-int *total_a_fumigar = 0;
-int velocidad_conjunta_empleados;
-
+int frame_count = 0;
 int empleados_tick_count = 0;
-
+int velocidad_conjunta_empleados = 0;
 int empleados_terminaron = 0;
 
-pthread_mutex_t lock;
+pthread_mutex_t lock_dron;
+pthread_mutex_t lock_empleados;
 
+pthread_cond_t dron_tick_finished;
+pthread_cond_t empleados_tick_finished;
+
+typedef struct {
+  int *parcela_empleados;
+  unsigned int wait_microseconds;
+  int total_a_fumigar;
+
+} EmpleadosArgs;
+
+typedef struct {
+  int *parcela_dron;
+  unsigned int wait_microseconds;
+  int total_a_fumigar;
+} DronArgs;
 
 void *rutina_dron(void *args) {
+  DronArgs *dron_args = (DronArgs *)args;
 
-  int *dronParams = (int *)args;
-  int wait_microseconds_uint = dronParams[0];
-  int total = dronParams[1];
+  unsigned int wait_microseconds = dron_args->wait_microseconds;
+  int *parcela_dron = dron_args->parcela_dron;
+  int total_a_fumigar = dron_args->total_a_fumigar;
 
   int seccion_sin_fumigar = -1;
-  // Drone fumiga parcela...
-  pthread_mutex_lock(&lock);
+
+  // Drone fumiga parcela..
   while (!dron_termino) {
+    // pthread_mutex_lock(&lock_dron);
+
     dron_tick_count += 1;
 
     for (int i = 0; i <= velocidad_dron; i++) {
       seccion_sin_fumigar += 1;
       parcela_dron[seccion_sin_fumigar] = 1;
-      dron_termino = seccion_sin_fumigar == (total - 1);
+      dron_termino = seccion_sin_fumigar == (total_a_fumigar - 1);
 
       if (dron_termino) {
         break;
       }
     }
-    pthread_mutex_unlock(&lock);
-
-    usleep(wait_microseconds_uint);
+    usleep(wait_microseconds);
+    // pthread_cond_signal(&dron_tick_finished);
   }
+
   return NULL;
 }
 
 void *rutina_empleados(void *args) {
-  int *empleadosParams = (int *) args;
-  int wait_microseconds_uint = empleadosParams[0];
-  int total = empleadosParams[1];
-  
+  EmpleadosArgs *empleado_args = (EmpleadosArgs *)args;
+  int *parcela_empleados = empleado_args->parcela_empleados;
+  unsigned int wait_microseconds = empleado_args->wait_microseconds;
+  int total_a_fumigar = empleado_args->total_a_fumigar;
+
   int seccion_sin_fumigar = -1;
-  
+  // Debes asignar la velocidad apropiada
 
   while (!empleados_terminaron) {
-	empleados_tick_count += 1;
+    // pthread_mutex_lock(&lock_empleados);
+
+    empleados_tick_count += 1;
+
     for (int i = 0; i <= velocidad_conjunta_empleados; i++) {
-      pthread_mutex_lock(&lock);
-	  seccion_sin_fumigar += 1;
+
+      seccion_sin_fumigar += 1;
       parcela_empleados[seccion_sin_fumigar] = 1;
       empleados_terminaron = seccion_sin_fumigar == (total - 1);
 
@@ -84,29 +101,57 @@ void *rutina_empleados(void *args) {
         break;
       }
     }
-
-    pthread_mutex_unlock(&lock);
-    usleep(wait_microseconds_uint);
+    usleep(wait_microseconds);
+    // pthread_cond_signal(&empleados_tick_finished);
   }
+
   return NULL;
 }
 
-int main(int argc, char *argv[]) {
-	pthread_t emp_id;
-	pthread_t dron_id;
-	pthread_attr_t attr;
+void showMatrices(int arr1[], int arr2[], int height, int width) {
+  clearConsole();
+  printf("\033[92mParcela Empleados:\n");
+  printMatrix(arr1, height, width);
 
-    int ticks_por_segundo = 1;
-	pthread_attr_init(&attr);
-    pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-	
-  
+  printf("\033[92mParcela Dron:\n");
+  printMatrix(arr2, height, width);
+  printf("Frame %d...\n", ++frame_count);
+}
+
+int main(int argc, char *argv[]) {
+
+  pthread_attr_t attr;
+  if (pthread_mutex_init(&lock_dron, NULL) !=
+      0) // inicializacion de mutex no completada
+  {
+    printf("\n Inicialización de mutex fallo\n");
+    return 1;
+  }
+  if (pthread_mutex_init(&lock_empleados, NULL) !=
+      0) // inicializacion de mutex no completada
+  {
+    printf("\n Inicialización de mutex fallo\n");
+    return 1;
+  }
+
+  pthread_cond_init(&empleados_tick_finished, NULL);
+  pthread_cond_init(&dron_tick_finished, NULL);
+
+  int ticks_por_segundo = 1;
+  pthread_attr_init(&attr);
+  pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
+
+  // Inicializar la estructura de argumento para empleados
+  EmpleadosArgs empleados_args;
+  DronArgs dron_args;
+
+  int largo_parcela = 0;
+  int ancho_parcela = 0;
 
   if (argc < 2) {
     printIntro();
   }
   int velocidades_empleados[256];
-
 
   // ---largo----
   //            |
@@ -114,9 +159,7 @@ int main(int argc, char *argv[]) {
   //            ancho
   //            |
   //            |
-  int largo_parcela = 0;
-  int ancho_parcela = 0;
-  
+
   printf("Ingresa el largo y ancho de la parcela:\n");
   fscanf(stdin, "%d %d", &largo_parcela, &ancho_parcela);
   fgetc(stdin); // Quita el \n del final
@@ -137,31 +180,25 @@ int main(int argc, char *argv[]) {
     printf("La velocidad del empleado %d es %d\n", i, velocidades_empleados[i]);
   }
 
-  int empleados_terminaron = 0;
-
-  
-  int empleados_tick_count = 0;
-
   int parcela_empleados[largo_parcela * ancho_parcela];
-  parcela_dron = new int[largo_parcela * ancho_parcela];
-  uint wait_microseconds = 1000000 / ticks_por_segundo;
+  int parcela_dron[largo_parcela * ancho_parcela];
+  unsigned int wait_microseconds = 1000000 / ticks_por_segundo;
   int total_a_fumigar = largo_parcela * ancho_parcela;
+  empleados_args.wait_microseconds = wait_microseconds;
+  empleados_args.total_a_fumigar = total_a_fumigar;
+  empleados_args.parcela_empleados = parcela_empleados;
 
-  dronParams = new int[2];
+  dron_args.wait_microseconds = wait_microseconds;
+  dron_args.total_a_fumigar = total_a_fumigar;
+  dron_args.parcela_dron = parcela_dron;
 
+  pthread_t emp_id;
+  pthread_t dron_id;
 
-  dronParams[0] = wait_microseconds;
-  dronParams[1] = total_a_fumigar;
+  fillMatrix(dron_args.parcela_dron = parcela_dron, largo_parcela,
+             ancho_parcela);
+  fillMatrix(empleados_args.parcela_empleados, largo_parcela, ancho_parcela);
 
-  empleadosParams = new int[2];
-
-  empleadosParams[0] = wait_microseconds;
-  empleadosParams[1] = total_a_fumigar;
-
-  fillMatrix(parcela_dron, largo_parcela, ancho_parcela);
-  fillMatrix(parcela_empleados, largo_parcela, ancho_parcela);
-
-  int velocidad_conjunta_empleados = 0;
   for (int empleadoI = 0; empleadoI < cuenta_empleados; empleadoI++) {
     velocidad_conjunta_empleados += velocidades_empleados[empleadoI];
   }
@@ -169,33 +206,26 @@ int main(int argc, char *argv[]) {
   printf("Los empleados en conjunto fumigan %d secciones por tick\n",
          velocidad_conjunta_empleados);
 
-  pthread_create(&emp_id, &attr, rutina_empleados, (void*) empleadosParams);
-  pthread_create(&dron_id, &attr, rutina_dron, (void*) dronParams);
+  pthread_create(&emp_id, &attr, rutina_empleados, (void *)&empleados_args);
+  pthread_create(&dron_id, &attr, rutina_dron, (void *)&dron_args);
 
   // Mostrar matrices...
-  int frame_count = 0;
-  while (!empleados_terminaron || !dron_termino) {
-    clearConsole();
-    printf("\033[92mParcela Empleados:\n");
-    printMatrix(parcela_empleados, ancho_parcela, largo_parcela);
 
-    printf("\033[92mParcela Dron:\n");
-    printMatrix(parcela_dron, ancho_parcela, largo_parcela);
-    printf("Frame %d...\n", ++frame_count);
+  while (!empleados_terminaron || !dron_termino) {
+    showMatrices(parcela_empleados, parcela_dron, ancho_parcela, largo_parcela);
     usleep(1000000 / 60); // 60 frames per second.
+    // pthread_cond_wait(&empleados_tick_finished, &lock_empleados);
+    // pthread_mutex_unlock(&lock_empleados);
+
+    // pthread_cond_wait(&dron_tick_finished, &lock_dron);
+    // pthread_mutex_unlock(&lock_dron);
   }
 
   pthread_join(emp_id, NULL);
   pthread_join(dron_id, NULL);
 
-  // Mostrando estado final...
-  clearConsole();
-  printf("\033[92mParcela Empleados:\n");
-  printMatrix(parcela_empleados, ancho_parcela, largo_parcela);
-
-  printf("\033[92mParcela Dron:\n");
-  printMatrix(parcela_dron, ancho_parcela, largo_parcela);
-  printf("Frame %d...\n", ++frame_count);
+  showMatrices(empleados_args.parcela_empleados, dron_args.parcela_dron,
+               ancho_parcela, largo_parcela);
 
   printf("Se termino de fumigar, calculando datos...\n");
   printf("Los empleados se tardaron %d ticks \n", empleados_tick_count);
@@ -239,9 +269,9 @@ void printMatrix(int arr[], int height, int width) {
       int should_color = arr[index];
 
       if (should_color) {
-        printf(FG_BLUE "1" RESET_COLOR);
+        printf(FG_BLUE "⬛" RESET_COLOR);
       } else {
-        printf(FG_RED "0" RESET_COLOR);
+        printf(FG_RED "⬜" RESET_COLOR);
       }
     }
     printf("\n"); // Moverse a la siguiente fila
@@ -287,7 +317,7 @@ void printIntro() {
   printTyping("WELCOME!!");
   printNewLine();
   printTypingWithColor("Universal simulation industries®", FG_YELLOW);
-  printTyping(" thank you for using our "
+  printTyping(" thanks you for using our "
               "software beta");
   printNewLine();
   printTyping("NOTE: Please read the manual carefully before using!");
@@ -378,7 +408,7 @@ void printPikachu() {
 
 void printTyping(char txt[]) { printAnimated(txt, 60); }
 void printTypingWithColor(char txt[], char color[]) {
-  printAnimatedWithColor(txt, color, 60);
+  printAnimatedWithColor(txt, color, 40);
 }
 void printSlow(char txt[]) { printAnimated(txt, 1000); }
 void printNewLine() { printf("\n"); }
