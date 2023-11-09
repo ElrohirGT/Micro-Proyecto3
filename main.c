@@ -19,46 +19,55 @@ void printIntro();
 void printOutro();
 void clearConsole();
 int dron_tick_count = 0;
-long velocidad_dron = 0;
+int velocidad_dron = 0;
 int dron_termino = 0;
+int *dronParams;
+int *empleadosParams;
+
+int *parcela_dron;
+int *parcela_empleados;
+int *total_a_fumigar = 0;
+int velocidad_conjunta_empleados;
+
+int empleados_tick_count = 0;
+
+int empleados_terminaron = 0;
 
 pthread_mutex_t lock;
 
-typedef struct{
-	int *parcela_empleados;
-	uint *wait_microseconds;
-	int *total_a_fumigar;
-} EmpleadosArgs;
 
-void *rutina_dron(void *parcela_dron, void *wait_microseconds, void *total_a_fumigar) {
+void *rutina_dron(void *args) {
 
-  uint wait_microseconds_uint = (uint)(intptr_t)wait_microseconds;
-  int *parcela_dron_int = (int *)parcela_dron;
+  int *dronParams = (int *)args;
+  int wait_microseconds_uint = dronParams[0];
+  int total = dronParams[1];
 
   int seccion_sin_fumigar = -1;
   // Drone fumiga parcela...
+  pthread_mutex_lock(&lock);
   while (!dron_termino) {
     dron_tick_count += 1;
 
     for (int i = 0; i <= velocidad_dron; i++) {
       seccion_sin_fumigar += 1;
-      parcela_dron_int[seccion_sin_fumigar] = 1;
-      dron_termino = seccion_sin_fumigar == (total_a_fumigar - 1);
+      parcela_dron[seccion_sin_fumigar] = 1;
+      dron_termino = seccion_sin_fumigar == (total - 1);
 
       if (dron_termino) {
         break;
       }
     }
+    pthread_mutex_unlock(&lock);
 
     usleep(wait_microseconds_uint);
   }
+  return NULL;
 }
 
 void *rutina_empleados(void *args) {
-  EmpleadoArgs *empleado_args = (EmpleadoArgs *)args;
-  int *parcela_empleados = empleado_args->parcela_empleados;
-  uint vait_microseconds = *(empleado_args->wait_microseconds);
-  int total_a_fumigar = *(empleado_args->total_a_fumigar);
+  int *empleadosParams = (int *) args;
+  int wait_microseconds_uint = empleadosParams[0];
+  int total = empleadosParams[1];
   
   int seccion_sin_fumigar = -1;
   
@@ -69,16 +78,17 @@ void *rutina_empleados(void *args) {
       pthread_mutex_lock(&lock);
 	  seccion_sin_fumigar += 1;
       parcela_empleados[seccion_sin_fumigar] = 1;
-      empleados_terminaron = seccion_sin_fumigar == (total_a_fumigar - 1);
+      empleados_terminaron = seccion_sin_fumigar == (total - 1);
 
       if (empleados_terminaron) {
         break;
       }
     }
-	pthread_cond_signal(&drone_finished);
-    pthread_mutex_unlock(&mutex);
-    usleep(wait_microseconds);
+
+    pthread_mutex_unlock(&lock);
+    usleep(wait_microseconds_uint);
   }
+  return NULL;
 }
 
 int main(int argc, char *argv[]) {
@@ -90,11 +100,7 @@ int main(int argc, char *argv[]) {
 	pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 	
-  // Inicializar la estructura de argumento para empleados
-  EmpleadosArgs empleados_args;
-  empleados_args.parcela_empleados = parcela_empleados;
-  empleados_args.wait_microseconds = &wait_microseconds;
-  empleados_args.total_a_fumigar = &total_a_fumigar;
+  
 
   if (argc < 2) {
     printIntro();
@@ -137,14 +143,25 @@ int main(int argc, char *argv[]) {
   int empleados_tick_count = 0;
 
   int parcela_empleados[largo_parcela * ancho_parcela];
-  int parcela_dron[largo_parcela * ancho_parcela];
+  parcela_dron = new int[largo_parcela * ancho_parcela];
   uint wait_microseconds = 1000000 / ticks_por_segundo;
   int total_a_fumigar = largo_parcela * ancho_parcela;
+
+  dronParams = new int[2];
+
+
+  dronParams[0] = wait_microseconds;
+  dronParams[1] = total_a_fumigar;
+
+  empleadosParams = new int[2];
+
+  empleadosParams[0] = wait_microseconds;
+  empleadosParams[1] = total_a_fumigar;
 
   fillMatrix(parcela_dron, largo_parcela, ancho_parcela);
   fillMatrix(parcela_empleados, largo_parcela, ancho_parcela);
 
-  long velocidad_conjunta_empleados = 0;
+  int velocidad_conjunta_empleados = 0;
   for (int empleadoI = 0; empleadoI < cuenta_empleados; empleadoI++) {
     velocidad_conjunta_empleados += velocidades_empleados[empleadoI];
   }
@@ -152,8 +169,8 @@ int main(int argc, char *argv[]) {
   printf("Los empleados en conjunto fumigan %d secciones por tick\n",
          velocidad_conjunta_empleados);
 
-  pthread_create(&emp_id, &attr, rutina_empleados, (void *) velocidad_conjunta_empleados);
-  pthread_create(&dron_id, &attr, rutina_dron, (void *) velocidad_dron);
+  pthread_create(&emp_id, &attr, rutina_empleados, (void*) empleadosParams);
+  pthread_create(&dron_id, &attr, rutina_dron, (void*) dronParams);
 
   // Mostrar matrices...
   int frame_count = 0;
