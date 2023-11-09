@@ -18,13 +18,17 @@ void fillMatrix(int arr[], int height, int width);
 void printIntro();
 void printOutro();
 void clearConsole();
-void *rutina_empleados();
 int dron_tick_count = 0;
 long velocidad_dron = 0;
 int dron_termino = 0;
 
 pthread_mutex_t lock;
 
+typedef struct{
+	int *parcela_empleados;
+	uint *wait_microseconds;
+	int *total_a_fumigar;
+} EmpleadosArgs;
 
 void *rutina_dron(void *parcela_dron, void *wait_microseconds, void *total_a_fumigar) {
 
@@ -47,6 +51,33 @@ void *rutina_dron(void *parcela_dron, void *wait_microseconds, void *total_a_fum
     }
 
     usleep(wait_microseconds_uint);
+  }
+}
+
+void *rutina_empleados(void *args) {
+  EmpleadoArgs *empleado_args = (EmpleadoArgs *)args;
+  int *parcela_empleados = empleado_args->parcela_empleados;
+  uint vait_microseconds = empleado_args->wait_microseconds;
+  int total_a_fumigar = empleado_args->total_a_fumigar;
+  
+  int seccion_sin_fumigar = -1;
+  
+
+  while (!empleados_terminaron) {
+	empleados_tick_count += 1;
+    for (int i = 0; i <= velocidad_conjunta_empleados; i++) {
+      pthread_mutex_lock(&lock);
+	  seccion_sin_fumigar += 1;
+      parcela_empleados[seccion_sin_fumigar] = 1;
+      empleados_terminaron = seccion_sin_fumigar == (total_a_fumigar - 1);
+
+      if (empleados_terminaron) {
+        break;
+      }
+    }
+	pthread_cond_signal(&drone_finished);
+    pthread_mutex_unlock(&mutex);
+    usleep(wait_microseconds);
   }
 }
 
@@ -173,28 +204,6 @@ int main(int argc, char *argv[]) {
   printOutro();
 
   return 0;
-}
-
-
-
-void *rutina_empleados() {
-  int seccion_sin_fumigar = -1;
-
-  while (!empleados_terminaron) {
-    empleados_tick_count += 1;
-
-    for (int i = 0; i <= velocidad_conjunta_empleados; i++) {
-      seccion_sin_fumigar += 1;
-      parcela_empleados[seccion_sin_fumigar] = 1;
-      empleados_terminaron = seccion_sin_fumigar == (total_a_fumigar - 1);
-
-      if (empleados_terminaron) {
-        break;
-      }
-    }
-
-    usleep(wait_microseconds);
-  }
 }
 
 void printMatrix(int arr[], int height, int width) {
