@@ -56,7 +56,6 @@ void *rutina_dron(void *args) {
   int seccion_sin_fumigar = -1;
 
   // Drone fumiga parcela..
-
   while (!dron_termino) {
     // pthread_mutex_lock(&lock_dron);
 
@@ -96,7 +95,7 @@ void *rutina_empleados(void *args) {
 
       seccion_sin_fumigar += 1;
       parcela_empleados[seccion_sin_fumigar] = 1;
-      empleados_terminaron = seccion_sin_fumigar == (total_a_fumigar - 1);
+      empleados_terminaron = seccion_sin_fumigar == (total - 1);
 
       if (empleados_terminaron) {
         break;
