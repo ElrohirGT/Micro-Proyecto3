@@ -318,7 +318,7 @@ void printIntro() {
   printTyping("WELCOME!!");
   printNewLine();
   printTypingWithColor("Universal simulation industries®", FG_YELLOW);
-  printTyping(" thank you for using our "
+  printTyping(" thanks you for using our "
               "software beta");
   printNewLine();
   printTyping("NOTE: Please read the manual carefully before using!");
@@ -409,7 +409,7 @@ void printPikachu() {
 
 void printTyping(char txt[]) { printAnimated(txt, 60); }
 void printTypingWithColor(char txt[], char color[]) {
-  printAnimatedWithColor(txt, color, 60);
+  printAnimatedWithColor(txt, color, 40);
 }
 void printSlow(char txt[]) { printAnimated(txt, 1000); }
 void printNewLine() { printf("\n"); }
