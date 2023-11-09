@@ -19,13 +19,43 @@ void printIntro();
 void printOutro();
 void clearConsole();
 void *rutina_empleados();
-void *rutina_dron();
+int dron_tick_count = 0;
+long velocidad_dron = 0;
+int dron_termino = 0;
+
+pthread_mutex_t lock;
+
+
+void *rutina_dron(void *parcela_dron, void *wait_microseconds, void *total_a_fumigar) {
+
+  uint wait_microseconds_uint = (uint)(intptr_t)wait_microseconds;
+  int *parcela_dron_int = (int *)parcela_dron;
+
+  int seccion_sin_fumigar = -1;
+  // Drone fumiga parcela...
+  while (!dron_termino) {
+    dron_tick_count += 1;
+
+    for (int i = 0; i <= velocidad_dron; i++) {
+      seccion_sin_fumigar += 1;
+      parcela_dron_int[seccion_sin_fumigar] = 1;
+      dron_termino = seccion_sin_fumigar == (total_a_fumigar - 1);
+
+      if (dron_termino) {
+        break;
+      }
+    }
+
+    usleep(wait_microseconds_uint);
+  }
+}
 
 int main(int argc, char *argv[]) {
 	pthread_t emp_id;
 	pthread_t dron_id;
 	pthread_attr_t attr;
 
+    int ticks_por_segundo = 1;
 	pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
 
@@ -34,7 +64,7 @@ int main(int argc, char *argv[]) {
     printIntro();
   }
   int velocidades_empleados[256];
-  long velocidad_dron = 0;
+
 
   // ---largo----
   //            |
@@ -44,7 +74,7 @@ int main(int argc, char *argv[]) {
   //            |
   int largo_parcela = 0;
   int ancho_parcela = 0;
-  int ticks_por_segundo = 1;
+  
   printf("Ingresa el largo y ancho de la parcela:\n");
   fscanf(stdin, "%d %d", &largo_parcela, &ancho_parcela);
   fgetc(stdin); // Quita el \n del final
@@ -66,9 +96,8 @@ int main(int argc, char *argv[]) {
   }
 
   int empleados_terminaron = 0;
-  int dron_termino = 0;
 
-  int dron_tick_count = 0;
+  
   int empleados_tick_count = 0;
 
   int parcela_empleados[largo_parcela * ancho_parcela];
@@ -146,25 +175,7 @@ int main(int argc, char *argv[]) {
   return 0;
 }
 
-void *rutina_dron() {
-  int seccion_sin_fumigar = -1;
-  // Drone fumiga parcela...
-  while (!dron_termino) {
-    dron_tick_count += 1;
 
-    for (int i = 0; i <= velocidad_dron; i++) {
-      seccion_sin_fumigar += 1;
-      parcela_dron[seccion_sin_fumigar] = 1;
-      dron_termino = seccion_sin_fumigar == (total_a_fumigar - 1);
-
-      if (dron_termino) {
-        break;
-      }
-    }
-
-    usleep(wait_microseconds);
-  }
-}
 
 void *rutina_empleados() {
   int seccion_sin_fumigar = -1;
