@@ -57,8 +57,8 @@ void *rutina_dron(void *parcela_dron, void *wait_microseconds, void *total_a_fum
 void *rutina_empleados(void *args) {
   EmpleadoArgs *empleado_args = (EmpleadoArgs *)args;
   int *parcela_empleados = empleado_args->parcela_empleados;
-  uint vait_microseconds = empleado_args->wait_microseconds;
-  int total_a_fumigar = empleado_args->total_a_fumigar;
+  uint vait_microseconds = *(empleado_args->wait_microseconds);
+  int total_a_fumigar = *(empleado_args->total_a_fumigar);
   
   int seccion_sin_fumigar = -1;
   
@@ -89,7 +89,12 @@ int main(int argc, char *argv[]) {
     int ticks_por_segundo = 1;
 	pthread_attr_init(&attr);
     pthread_attr_setdetachstate(&attr, PTHREAD_CREATE_JOINABLE);
-
+	
+  // Inicializar la estructura de argumento para empleados
+  EmpleadosArgs empleados_args;
+  empleados_args.parcela_empleados = parcela_empleados;
+  empleados_args.wait_microseconds = &wait_microseconds;
+  empleados_args.total_a_fumigar = &total_a_fumigar;
 
   if (argc < 2) {
     printIntro();
