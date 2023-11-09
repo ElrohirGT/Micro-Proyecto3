@@ -27,8 +27,8 @@ int empleados_tick_count = 0;
 int velocidad_conjunta_empleados = 0;
 int empleados_terminaron = 0;
 
-pthread_mutex_t lock;
-pthread_mutex_t lock2; // Inicializa el mutex
+pthread_mutex_t lock_dron;
+pthread_mutex_t lock_empleados;
 
 pthread_cond_t dron_tick_finished;
 pthread_cond_t empleados_tick_finished;
@@ -58,6 +58,7 @@ void *rutina_dron(void *args) {
   // Drone fumiga parcela..
 
   while (!dron_termino) {
+    //pthread_mutex_lock(&lock_dron);
 
     dron_tick_count += 1;
 
@@ -69,11 +70,9 @@ void *rutina_dron(void *args) {
       if (dron_termino) {
         break;
       }
-
-	  //pthread_mutex_lock(&lock);
-      usleep(wait_microseconds);
-	  //pthread_mutex_unlock(&lock);
     }
+    usleep(wait_microseconds);
+    //pthread_cond_signal(&dron_tick_finished);
   }
 
   return NULL;
@@ -89,6 +88,7 @@ void *rutina_empleados(void *args) {
   // Debes asignar la velocidad apropiada
 
   while (!empleados_terminaron) {
+    //pthread_mutex_lock(&lock_empleados);
 
     empleados_tick_count += 1;
 
@@ -101,11 +101,9 @@ void *rutina_empleados(void *args) {
       if (empleados_terminaron) {
         break;
       }
-
-	  //pthread_mutex_lock(&lock2);
-      usleep(wait_microseconds);
-	  //pthread_mutex_unlock(&lock2);
     }
+    usleep(wait_microseconds);
+    //pthread_cond_signal(&empleados_tick_finished);
   }
 
   return NULL;
@@ -124,18 +122,21 @@ void showMatrices(int arr1[], int arr2[], int height, int width) {
 int main(int argc, char *argv[]) {
 
   pthread_attr_t attr;
-  if (pthread_mutex_init(&lock, NULL) !=
+  if (pthread_mutex_init(&lock_dron, NULL) !=
       0) // inicializacion de mutex no completada
   {
     printf("\n Inicialización de mutex fallo\n");
     return 1;
   }
-  if (pthread_mutex_init(&lock2, NULL) !=
+  if (pthread_mutex_init(&lock_empleados, NULL) !=
       0) // inicializacion de mutex no completada
   {
     printf("\n Inicialización de mutex fallo\n");
     return 1;
   }
+
+  pthread_cond_init(&empleados_tick_finished, NULL);
+  pthread_cond_init(&dron_tick_finished, NULL);
 
   int ticks_por_segundo = 1;
   pthread_attr_init(&attr);
@@ -212,10 +213,13 @@ int main(int argc, char *argv[]) {
   // Mostrar matrices...
 
   while (!empleados_terminaron || !dron_termino) {
-    showMatrices(parcela_empleados, parcela_dron,
-                 ancho_parcela, largo_parcela);
+    showMatrices(parcela_empleados, parcela_dron, ancho_parcela, largo_parcela);
     usleep(1000000 / 60); // 60 frames per second.
-	//pthread_cond_wait()
+    //pthread_cond_wait(&empleados_tick_finished, &lock_empleados);
+    //pthread_mutex_unlock(&lock_empleados);
+
+    //pthread_cond_wait(&dron_tick_finished, &lock_dron);
+    //pthread_mutex_unlock(&lock_dron);
   }
 
   pthread_join(emp_id, NULL);
@@ -223,15 +227,6 @@ int main(int argc, char *argv[]) {
 
   showMatrices(empleados_args.parcela_empleados, dron_args.parcela_dron,
                ancho_parcela, largo_parcela);
-
-  // Mostrando estado final...
-  clearConsole();
-  printf("\033[92mParcela Empleados:\n");
-  printMatrix(empleados_args.parcela_empleados, ancho_parcela, largo_parcela);
-
-  printf("\033[92mParcela Dron:\n");
-  printMatrix(dron_args.parcela_dron, ancho_parcela, largo_parcela);
-  printf("Frame %d...\n", ++frame_count);
 
   printf("Se termino de fumigar, calculando datos...\n");
   printf("Los empleados se tardaron %d ticks \n", empleados_tick_count);
@@ -275,9 +270,9 @@ void printMatrix(int arr[], int height, int width) {
       int should_color = arr[index];
 
       if (should_color) {
-        printf(FG_BLUE "1" RESET_COLOR);
+        printf(FG_BLUE "⬛" RESET_COLOR);
       } else {
-        printf(FG_RED "0" RESET_COLOR);
+        printf(FG_RED "⬜" RESET_COLOR);
       }
     }
     printf("\n"); // Moverse a la siguiente fila
