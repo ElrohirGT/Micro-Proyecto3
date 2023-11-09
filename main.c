@@ -167,6 +167,10 @@ int main(int argc, char *argv[]) {
     printf("Frame %d...\n", ++frame_count);
     usleep(1000000 / 60); // 60 frames per second.
   }
+
+  pthread_join(emp_id, NULL);
+  pthread_join(dron_id, NULL);
+
   // Mostrando estado final...
   clearConsole();
   printf("\033[92mParcela Empleados:\n");
