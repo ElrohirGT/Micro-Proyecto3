@@ -24,11 +24,14 @@ int velocidad_dron = 0;
 int dron_termino = 0;
 int frame_count = 0;
 int empleados_tick_count = 0;
-int velcocidad_conjunta_empleados = 0;
+int velocidad_conjunta_empleados = 0;
 int empleados_terminaron = 0;
 
 pthread_mutex_t lock;
 pthread_mutex_t lock2; // Inicializa el mutex
+
+pthread_cond_t dron_tick_finished;
+pthread_cond_t empleados_tick_finished;
 
 typedef struct {
   int *parcela_empleados;
@@ -41,7 +44,6 @@ typedef struct {
   int *parcela_dron;
   unsigned int wait_microseconds;
   int total_a_fumigar;
-
 } DronArgs;
 
 void *rutina_dron(void *args) {
@@ -68,7 +70,9 @@ void *rutina_dron(void *args) {
         break;
       }
 
+	  //pthread_mutex_lock(&lock);
       usleep(wait_microseconds);
+	  //pthread_mutex_unlock(&lock);
     }
   }
 
@@ -88,7 +92,7 @@ void *rutina_empleados(void *args) {
 
     empleados_tick_count += 1;
 
-    for (int i = 0; i <= velcocidad_conjunta_empleados; i++) {
+    for (int i = 0; i <= velocidad_conjunta_empleados; i++) {
 
       seccion_sin_fumigar += 1;
       parcela_empleados[seccion_sin_fumigar] = 1;
@@ -98,7 +102,9 @@ void *rutina_empleados(void *args) {
         break;
       }
 
+	  //pthread_mutex_lock(&lock2);
       usleep(wait_microseconds);
+	  //pthread_mutex_unlock(&lock2);
     }
   }
 
@@ -113,7 +119,6 @@ void showMatrices(int arr1[], int arr2[], int height, int width) {
   printf("\033[92mParcela Dron:\n");
   printMatrix(arr2, height, width);
   printf("Frame %d...\n", ++frame_count);
-  usleep(1000000 / 60); // 60 frames per second.
 }
 
 int main(int argc, char *argv[]) {
@@ -175,12 +180,6 @@ int main(int argc, char *argv[]) {
     printf("La velocidad del empleado %d es %d\n", i, velocidades_empleados[i]);
   }
 
-  int empleados_terminaron = 0;
-  int dron_termino = 0;
-
-  int empleados_tick_count = 0;
-  int dron_tick_count = 0;
-
   int parcela_empleados[largo_parcela * ancho_parcela];
   int parcela_dron[largo_parcela * ancho_parcela];
   unsigned int wait_microseconds = 1000000 / ticks_por_segundo;
@@ -193,44 +192,34 @@ int main(int argc, char *argv[]) {
   dron_args.total_a_fumigar = total_a_fumigar;
   dron_args.parcela_dron = parcela_dron;
 
-  pthread_t emp_id[total_a_fumigar];
-  pthread_t dron_id[total_a_fumigar];
+  pthread_t emp_id;
+  pthread_t dron_id;
 
   fillMatrix(dron_args.parcela_dron = parcela_dron, largo_parcela,
              ancho_parcela);
   fillMatrix(empleados_args.parcela_empleados, largo_parcela, ancho_parcela);
 
   for (int empleadoI = 0; empleadoI < cuenta_empleados; empleadoI++) {
-    velcocidad_conjunta_empleados += velocidades_empleados[empleadoI];
+    velocidad_conjunta_empleados += velocidades_empleados[empleadoI];
   }
 
   printf("Los empleados en conjunto fumigan %d secciones por tick\n",
-         velcocidad_conjunta_empleados);
+         velocidad_conjunta_empleados);
 
-  for (int i = 0; i < total_a_fumigar; i++) {
-    pthread_create(&emp_id[i], &attr, rutina_empleados, (void *)&dron_args);
-    pthread_create(&dron_id[i], &attr, rutina_dron, (void *)&empleados_args);
-  }
+  pthread_create(&emp_id, &attr, rutina_empleados, (void *)&empleados_args);
+  pthread_create(&dron_id, &attr, rutina_dron, (void *)&dron_args);
 
   // Mostrar matrices...
 
   while (!empleados_terminaron || !dron_termino) {
-    clearConsole();
-    printf("\033[92mParcela Empleados:\n");
-    printMatrix(empleados_args.parcela_empleados, ancho_parcela, largo_parcela);
-
-    printf("\033[92mParcela Dron:\n");
-    printMatrix(dron_args.parcela_dron, ancho_parcela, largo_parcela);
-    showMatrices(empleados_args.parcela_empleados, dron_args.parcela_dron,
+    showMatrices(parcela_empleados, parcela_dron,
                  ancho_parcela, largo_parcela);
-    printf("Frame %d...\n", ++frame_count);
-
     usleep(1000000 / 60); // 60 frames per second.
-    for (int i = 0; i < total_a_fumigar; i++) {
-      pthread_join(emp_id[i], NULL);
-      pthread_join(dron_id[i], NULL);
-    }
+	//pthread_cond_wait()
   }
+
+  pthread_join(emp_id, NULL);
+  pthread_join(dron_id, NULL);
 
   showMatrices(empleados_args.parcela_empleados, dron_args.parcela_dron,
                ancho_parcela, largo_parcela);
@@ -248,7 +237,7 @@ int main(int argc, char *argv[]) {
   printf("Los empleados se tardaron %d ticks \n", empleados_tick_count);
   printf("El dron se tardo %d ticks \n", dron_tick_count);
   if (empleados_tick_count > dron_tick_count) {
-    int vpromempleados = velcocidad_conjunta_empleados / cuenta_empleados;
+    int vpromempleados = velocidad_conjunta_empleados / cuenta_empleados;
 
     int empleados_necesarios =
         (empleados_tick_count - dron_tick_count) / vpromempleados;
