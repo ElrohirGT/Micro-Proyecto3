@@ -58,7 +58,7 @@ void *rutina_dron(void *args) {
   // Drone fumiga parcela..
 
   while (!dron_termino) {
-    //pthread_mutex_lock(&lock_dron);
+    // pthread_mutex_lock(&lock_dron);
 
     dron_tick_count += 1;
 
@@ -72,7 +72,7 @@ void *rutina_dron(void *args) {
       }
     }
     usleep(wait_microseconds);
-    //pthread_cond_signal(&dron_tick_finished);
+    // pthread_cond_signal(&dron_tick_finished);
   }
 
   return NULL;
@@ -88,7 +88,7 @@ void *rutina_empleados(void *args) {
   // Debes asignar la velocidad apropiada
 
   while (!empleados_terminaron) {
-    //pthread_mutex_lock(&lock_empleados);
+    // pthread_mutex_lock(&lock_empleados);
 
     empleados_tick_count += 1;
 
@@ -103,7 +103,7 @@ void *rutina_empleados(void *args) {
       }
     }
     usleep(wait_microseconds);
-    //pthread_cond_signal(&empleados_tick_finished);
+    // pthread_cond_signal(&empleados_tick_finished);
   }
 
   return NULL;
@@ -215,11 +215,11 @@ int main(int argc, char *argv[]) {
   while (!empleados_terminaron || !dron_termino) {
     showMatrices(parcela_empleados, parcela_dron, ancho_parcela, largo_parcela);
     usleep(1000000 / 60); // 60 frames per second.
-    //pthread_cond_wait(&empleados_tick_finished, &lock_empleados);
-    //pthread_mutex_unlock(&lock_empleados);
+    // pthread_cond_wait(&empleados_tick_finished, &lock_empleados);
+    // pthread_mutex_unlock(&lock_empleados);
 
-    //pthread_cond_wait(&dron_tick_finished, &lock_dron);
-    //pthread_mutex_unlock(&lock_dron);
+    // pthread_cond_wait(&dron_tick_finished, &lock_dron);
+    // pthread_mutex_unlock(&lock_dron);
   }
 
   pthread_join(emp_id, NULL);
